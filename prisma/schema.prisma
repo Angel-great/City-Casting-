@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  role          String    @default("CUSTOMER") // CUSTOMER, ACCOUNT_MANAGER, DEPARTMENT_EMPLOYEE, EXECUTIVE
+  firstName     String
+  lastName      String
+  companyName   String?
+  phone         String?
+  customerCode  String?   @unique
+  pin           String?
+  overridePin   String?
+  department    String?   // CASTING, CAD, WAX, MOLD, POLISHING, ACCOUNTING, ADMIN
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Payment terms
+  paymentTerms  String    @default("COD") // COD, NET7, NET15, NET30
+  creditLimit   Float     @default(0)
+
+  // Relations
+  orders        Order[]   @relation("CustomerOrders")
+  managedOrders Order[]   @relation("ManagerOrders")
+  molds         Mold[]
+  invoices      Invoice[]
+  payments      Payment[]
+  pricingRules  CustomerPricing[]
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  orderNumber     String      @unique
+  orderType       String      // STRAIGHT_CAST, MAKE_MOLD, MOLD_CAST, FILE_CAST, CAD_ORDER, CAD_EDIT, FINISHING, QUOTE_REQUEST
+  status          String      @default("CREATED") // CREATED, PLACED, IN_PROGRESS, CASTING, WAX, MOLD_MAKING, POLISHING, CAD, QUALITY_CHECK, READY, DELIVERED, CANCELLED
+  customerId      String
+  customer        User        @relation("CustomerOrders", fields: [customerId], references: [id])
+  managerId       String?
+  manager         User?       @relation("ManagerOrders", fields: [managerId], references: [id])
+  currentDept     String?     // Current department handling the order
+  notes           String?
+  totalAmount     Float       @default(0)
+  paidAmount      Float       @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  placedAt        DateTime?
+
+  // Relations
+  items           OrderItem[]
+  statusHistory   OrderStatusHistory[]
+  invoices        Invoice[]
+}
+
+model OrderItem {
+  id              String    @id @default(uuid())
+  orderId         String
+  order           Order     @relation(fields: [orderId], references: [id])
+  styleName       String?
+  imageUrl        String?
+  metal           String?
+  moldType        String?   // SILICONE, RUBBER, BLUE
+  moldId          String?
+  mold            Mold?     @relation(fields: [moldId], references: [id])
+  quantity        Int       @default(1)
+  waxSize         String?
+  polishingServices String? // JSON array of selected services
+  printType       String?   // CASTABLE, RESIN_PLASTIC
+  fileUrl         String?
+  fileType        String?   // STL, 3DM, PDF, IMAGE
+  cadEditNotes    String?
+  notes           String?
+  unitPrice       Float     @default(0)
+  totalPrice      Float     @default(0)
+  createdAt       DateTime  @default(now())
+}
+
+model OrderStatusHistory {
+  id          String   @id @default(uuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id])
+  status      String
+  department  String?
+  changedBy   String?
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+model Mold {
+  id            String      @id @default(uuid())
+  customerId    String
+  customer      User        @relation(fields: [customerId], references: [id])
+  styleNumber   String
+  styleName     String?
+  imageUrl      String?
+  moldMaterial  String?     // SILICONE, RUBBER, BLUE
+  dateMade      DateTime?
+  condition     String      @default("GOOD") // GOOD, FAIR, POOR, RETIRED
+  isPickedUp    Boolean     @default(false)
+  notes         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  orderItems    OrderItem[]
+}
+
+model MetalPrice {
+  id          String   @id @default(uuid())
+  metalType   String   // GOLD, SILVER, PLATINUM, PALLADIUM
+  karat       String?  // 24K, 22K, 18K, 14K, 10K, 5K (for gold)
+  color       String?  // YELLOW, WHITE, ROSE, GREEN (for gold)
+  pricePerOz  Float
+  pricePerGram Float
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
+model CustomerPricing {
+  id            String   @id @default(uuid())
+  customerId    String
+  customer      User     @relation(fields: [customerId], references: [id])
+  serviceType   String
+  priceModifier Float    @default(1.0)
+  fixedPrice    Float?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Invoice {
+  id            String    @id @default(uuid())
+  invoiceNumber String    @unique
+  customerId    String
+  customer      User      @relation(fields: [customerId], references: [id])
+  orderId       String?
+  order         Order?    @relation(fields: [orderId], references: [id])
+  amount        Float
+  paidAmount    Float     @default(0)
+  status        String    @default("PENDING") // PENDING, PARTIAL, PAID, OVERDUE
+  dueDate       DateTime
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  payments      Payment[]
+}
+
+model Payment {
+  id          String   @id @default(uuid())
+  customerId  String
+  customer    User     @relation(fields: [customerId], references: [id])
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id])
+  amount      Float
+  method      String?  // CASH, CHECK, WIRE, CREDIT_CARD
+  reference   String?
+  createdAt   DateTime @default(now())
+}
+
+model PolicyOverride {
+  id            String   @id @default(uuid())
+  executiveId   String
+  department    String
+  action        String
+  reason        String?
+  targetId      String?
+  previousValue String?
+  newValue      String?
+  createdAt     DateTime @default(now())
+}
+
+model SystemSetting {
+  id    String @id @default(uuid())
+  key   String @unique
+  value String
+  updatedAt DateTime @updatedAt
+}
